@@ -1,39 +1,17 @@
 import numpy as np
+from keras.optimizers import Adam
 from matplotlib import pyplot as plt
 from keras.datasets import cifar10
 import tensorflow as tf
-import my_models
+from IPython.display import clear_output
+from keras.callbacks import LambdaCallback, ReduceLROnPlateau, TensorBoard
+
+import autoencoder
 import my_callbacks
+import image_tools
+from VAE import VAE
 
-def plot_digits(*args):
-    args = [x.squeeze() for x in args]
-    n = min([x.shape[0] for x in args])
-
-    plt.figure(figsize=(2 * n, 2 * len(args)))
-    for j in range(n):
-        for i in range(len(args)):
-            ax = plt.subplot(len(args), n, i * n + j + 1)
-            plt.imshow(args[i][j])
-            plt.gray()
-            ax.get_xaxis().set_visible(False)
-            ax.get_yaxis().set_visible(False)
-    plt.show()
-
-def addsalt_pepper(img, SNR):
-    img_ = img.copy()
-    c, h, w = img_.shape
-    mask = np.random.choice((0, 1, 2), size=(1, h, w), p=[SNR, (1 - SNR) / 2., (1 - SNR) / 2.])
-    mask = np.repeat (mask, c, axis = 0) # Копировать по каналу в ту же форму, что и img
-    img_ [mask == 1] = 255 # солевой шум
-    img_ [mask == 2] = 0 # перцовый шум
-    return img
-
-def get_noised_array(x, snr):
-    x_noised = x.copy()
-    for img in x_noised:
-        img = addsalt_pepper(img, snr)
-    return x_noised
-
+"""
 #preparing data
 (x_train, y_train), (x_test, y_test) = cifar10.load_data()
 
@@ -67,14 +45,92 @@ model.fit(x_train, x_train,
 
 
 #demonstrating of saving and loading model on disc
-"""
-my_models.save_model(model, 'my_model1')
-loaded_model = my_models.load_model('my_model1')
-"""
+
+#my_models.save_model(model, 'my_model1')
+#loaded_model = my_models.load_model('my_model1')
+
 
 #show results of autoencoder work
 n = 10
 imgs = x_test[:n]
 #decoded_imgs = loaded_model.predict(imgs, batch_size=n)
 decoded_imgs = model.predict(imgs, batch_size=n)
-plot_digits(imgs, decoded_imgs)
+image_tools.plot_digits(imgs, decoded_imgs)
+"""
+
+# гиперпараметры
+VARIATIONAL = True
+HEIGHT = 28
+WIDTH = 28
+BATCH_SIZE = 500
+LATENT_DIM = 2
+DROPOUT_RATE = 0.3
+START_FILTERS = 32
+CAPACITY = 3
+CONDITIONING = True
+OPTIMIZER = Adam(lr=0.01)
+
+(x_train, _), (x_test, _) = tf.keras.datasets.mnist.load_data()
+x_train = x_train.reshape((x_train.shape[0], 28, 28, 1)) / 255.
+x_test = x_test.reshape((x_test.shape[0], 28, 28, 1)) / 255.
+
+model = VAE(input_shape=(28, 28, 1), latent_dim=LATENT_DIM, batch_size=BATCH_SIZE, optimizer=OPTIMIZER)
+vae = model.get_model()
+
+#params for plots
+digit_size = 28
+n = 10 # Картинка с nxn цифр
+
+# Arrays for saving learning results, for visualization
+figs = []
+latent_distrs = []
+epochs = []
+# epochs for saving
+save_epochs = set(list((np.arange(0, 59) ** 1.701).astype(np.int)) + list(range(10)))
+# Images for demo
+imgs = x_test[:BATCH_SIZE]
+n_compare = 10
+
+# Models for callback function
+generator = model.decoder
+encoder_mean = model.z_meaner
+# Callback function
+
+#integration with wandb
+import wandb
+wandb.login()
+run = wandb.init(
+    # Set the project where this run will be logged
+    project="Sputnik-Internship",
+    # Track hyperparameters and run metadata
+    config={
+        "loss": model.vae_loss,
+        "metric": "accuracy",
+        "epoch": 10,
+        "batch_size": BATCH_SIZE
+    })
+
+def on_epoch_end(epoch, logs):
+    if epoch in save_epochs:
+        clear_output()
+        #wandb logging
+        wandb.log({"epoch": logs["epoch"], "loss": logs["loss"]})
+
+        decoded = vae.predict(imgs, batch_size=BATCH_SIZE)
+        image_tools.plot_digits(imgs[:n_compare], decoded[:n_compare])
+        # Рисование многообразия
+        figure = image_tools.draw_manifold(generator, digit_size=digit_size, n=n, latent_dim=LATENT_DIM, show=True)
+
+        epochs.append(epoch)
+        figs.append(figure)
+        latent_distrs.append(encoder_mean.predict(x_test, BATCH_SIZE))
+pltfig = LambdaCallback(on_epoch_end=on_epoch_end)
+
+
+
+#start learning
+vae.fit(x_train, x_train, shuffle=True, epochs=10,
+        batch_size=BATCH_SIZE,
+        validation_data=(x_test, x_test),
+        callbacks=[pltfig],
+        verbose=1)

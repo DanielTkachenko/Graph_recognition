@@ -25,10 +25,14 @@ def get_arch(input_shape, levels, filters_min = 4,
     model.compile(optimizer='adam', loss='mse')
     return model
 
-def build_encoder(input, levels, filters_min, strides_shape, conv2d, batch_normalization, max_pooling):
+def build_encoder(input, levels, filters_min, strides_shape, conv2d, batch_normalization, max_pooling, filters_num_down):
     for i in range(levels):
+        if filters_num_down:
+            filters_num = filters_min * (levels - i)
+        else:
+            filters_num = filters_min * (i + 1)
         if conv2d == True:
-            input = Conv2D(filters_min * (levels - i), (3, 3),strides=strides_shape, padding='same')(input)
+            input = Conv2D(filters_num, (3, 3),strides=strides_shape, padding='same')(input)
         if batch_normalization == True:
             input = BatchNormalization()(input)
         input = relu(input)
@@ -37,10 +41,14 @@ def build_encoder(input, levels, filters_min, strides_shape, conv2d, batch_norma
     return input
 
 def build_decoder(input, levels, filters_min, strides_shape, conv2d,
-                  batch_normalization, up_sampling, conv2d_transpose, c2dt_strides_shape):
+                  batch_normalization, up_sampling, conv2d_transpose, c2dt_strides_shape, filters_num_up):
     for i in range(levels):
+        if filters_num_up:
+            filters_num = filters_min * (i + 1)
+        else:
+            filters_num = filters_min * (levels - i)
         if conv2d == True:
-            input = Conv2D(filters_min * (i + 1), (3, 3),strides=strides_shape, padding='same')(input)
+            input = Conv2D(filters_num, (3, 3),strides=strides_shape, padding='same')(input)
         if conv2d_transpose == True:
             input = Conv2DTranspose(filters_min * (i + 1), (3, 3), strides=c2dt_strides_shape, padding='same')(input)
         if batch_normalization == True:

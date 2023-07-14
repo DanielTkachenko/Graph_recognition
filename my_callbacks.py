@@ -1,8 +1,10 @@
 import keras.callbacks
 from matplotlib import pyplot as plt
+from IPython.display import clear_output
+import numpy as np
 
 
-class CustomCallback(keras.callbacks.LambdaCallback):
+class CustomAECallback(keras.callbacks.LambdaCallback):
     def __init__(self):
         self.batch_list = []
         self.loss_list = []
@@ -22,3 +24,4 @@ class CustomCallback(keras.callbacks.LambdaCallback):
     def on_train_end(self, logs=None):
         plt.plot(self.batch_list, self.loss_list)
         plt.show()
+
