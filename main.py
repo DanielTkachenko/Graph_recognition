@@ -77,25 +77,7 @@ x_test = x_test.reshape((x_test.shape[0], 28, 28, 1)) / 255.
 model = VAE(input_shape=(28, 28, 1), latent_dim=LATENT_DIM, batch_size=BATCH_SIZE, optimizer=OPTIMIZER)
 vae = model.get_model()
 
-#params for plots
-digit_size = 28
-n = 10 # Картинка с nxn цифр
-
-# Arrays for saving learning results, for visualization
-figs = []
-latent_distrs = []
-epochs = []
-# epochs for saving
-save_epochs = set(list((np.arange(0, 59) ** 1.701).astype(np.int)) + list(range(10)))
-# Images for demo
-imgs = x_test[:BATCH_SIZE]
-n_compare = 10
-
-# Models for callback function
-generator = model.decoder
-encoder_mean = model.z_meaner
-# Callback function
-
+"""
 #integration with wandb
 import wandb
 wandb.login()
@@ -109,28 +91,13 @@ run = wandb.init(
         "epoch": 10,
         "batch_size": BATCH_SIZE
     })
-
-def on_epoch_end(epoch, logs):
-    if epoch in save_epochs:
-        clear_output()
-        #wandb logging
-        wandb.log({"epoch": logs["epoch"], "loss": logs["loss"]})
-
-        decoded = vae.predict(imgs, batch_size=BATCH_SIZE)
-        image_tools.plot_digits(imgs[:n_compare], decoded[:n_compare])
-        # Рисование многообразия
-        figure = image_tools.draw_manifold(generator, digit_size=digit_size, n=n, latent_dim=LATENT_DIM, show=True)
-
-        epochs.append(epoch)
-        figs.append(figure)
-        latent_distrs.append(encoder_mean.predict(x_test, BATCH_SIZE))
-pltfig = LambdaCallback(on_epoch_end=on_epoch_end)
-
+"""
 
 
 #start learning
 vae.fit(x_train, x_train, shuffle=True, epochs=10,
         batch_size=BATCH_SIZE,
         validation_data=(x_test, x_test),
-        callbacks=[pltfig],
+        callbacks=[my_callbacks.CustomVAECallback(vae=vae, generator=model.decoder,
+                                                  x_test=x_test, latent_dim=LATENT_DIM, batch_size=BATCH_SIZE)],
         verbose=1)
